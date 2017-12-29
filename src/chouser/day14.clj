@@ -62,8 +62,8 @@
                            nbr2 (disj groups nbr2)
                            nbr1 groups
                            :else (conj groups id))
-                 :grid (assoc-in grid coord (or nbr1 id))
-                 #_(if nbr2
+                 :grid #_(assoc-in grid coord (or nbr1 id))
+                 (if nbr2
                      (mapv (fn [row] (mapv (fn [c] (if (= c nbr2) nbr1 c)) row))
                            (assoc-in grid coord nbr1))
                      (assoc-in grid coord (or nbr1 id)))
@@ -82,7 +82,7 @@
     #_(prn :groups (sort groups) :id id)
     #_(prn :gridps (sort (set (filter int? (mapcat seq grid)))))
     (prn :count (count groups))
-    (prn :count-again (count (distinct (filter int? (mapcat seq grid)))))
+    #_(prn :count-again (count (distinct (filter int? (mapcat seq grid)))))
     ))
 
 (defonce test-grid
