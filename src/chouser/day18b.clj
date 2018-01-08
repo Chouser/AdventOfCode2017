@@ -6,38 +6,32 @@
   (for [line (line-seq (io/reader "resources/input18.txt"))]
     (read-string (str \[ line \]))))
 
-(defn compile-body [prog rip]
-  (->>
-   prog
-   (mapcat (fn [ip [op x y :as cmd]]
-             (case op
-               set `[(set! ~x ~y)]
-               add `[(set! ~x (+ ~x ~y))]
-               mul `[(set! ~x (* ~x ~y))]
-               mod `[(set! ~x (rem ~x ~y))]
-               snd `[(do (swap! ~'blk dec)
-                         (deliver (first ~'cout) ~x)
-                         (set! ~'send-count (inc ~'send-count))
-                         (set! ~'cout (rest ~'cout)))]
-               rcv `[(if (= 2 (swap! ~'blk inc))
-                       (do
-                         (deliver (first ~'cout) :done)
-                         (recur -1))
-                       (let [val# @(first ~'cin)]
-                         (set! ~'cin (rest ~'cin))
-                         (if (= :done val#)
-                           (recur -1)
-                           (do
-                             (set! ~x (long val#))
-                             (recur ~(inc ip))))))
-                     :end]
-               jgz `[(if (pos? ~x)
-                       (recur ~(if (number? y) (+ ip y) `(+ ~ip ~y)))
-                       (recur ~(inc ip)))
-                     :end]))
-           (drop rip (range)))
-   (take-while #(not= % :end))
-   (cons `do)))
+(defn compile-cmd [[op x y :as cmd] ip]
+  (let [next `(recur ~(inc ip))]
+    (case op
+      set `[(set! ~x ~y) ~next]
+      add `[(set! ~x (+ ~x ~y)) ~next]
+      mul `[(set! ~x (* ~x ~y)) ~next]
+      mod `[(set! ~x (rem ~x ~y)) ~next]
+      snd `[(swap! ~'blk dec)
+            (deliver (first ~'cout) ~x)
+            (set! ~'send-count (inc ~'send-count))
+            (set! ~'cout (rest ~'cout))
+            ~next]
+      rcv `[(if (= 2 (swap! ~'blk inc))
+              (do
+                (deliver (first ~'cout) :done)
+                (recur -1))
+              (let [val# @(first ~'cin)]
+                (set! ~'cin (rest ~'cin))
+                (if (= :done val#)
+                  (recur -1)
+                  (do
+                    (set! ~x (long val#))
+                    ~next))))]
+      jgz `[(if (pos? ~x)
+              (recur ~(if (number? y) (+ ip y) `(+ ~ip ~y)))
+              ~next)])))
 
 (defn compile-fn [prog]
   (let [regs (map #(with-meta (symbol (str (char %))) {:tag 'long, :unsynchronized-mutable true})
@@ -45,9 +39,9 @@
         Prog (gensym "Prog-")
         pid (gensym "pid-")]
     `(do
-       (deftype ~Prog [~(with-meta 'cin {:unsynchronized-mutable true})
-                       ~(with-meta 'cout {:unsynchronized-mutable true})
-                       ~(with-meta 'send-count {:unsynchronized-mutable true})
+       (deftype ~Prog [~'^:unsynchronized-mutable cin
+                       ~'^:unsynchronized-mutable cout
+                       ~'^:unsynchronized-mutable send-count
                        ~'blk
                        ~@regs]
          IFn
@@ -55,9 +49,9 @@
            (loop [~'rip (long 0)]
              (case ~'rip
                -1 ~'send-count
-               ~@(mapcat (fn [rip prog] [rip (compile-body prog rip)])
+               ~@(mapcat (fn [rip prog] [rip (cons `do (compile-cmd prog rip))])
                          (range)
-                         (take-while seq (iterate rest prog)))))))
+                         prog)))))
        (fn run# [cin# cout# blk# ~pid]
          ((new ~(symbol (str (str *ns*) "." Prog))
                 cin# cout# 0 blk#
