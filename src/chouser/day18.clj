@@ -40,8 +40,6 @@
               (get s x 0)
               x))
         s (-> s
-              (update :trace conj {:ip ip :cmd cmd
-                                   :state (into {} (filter #(symbol? (key %)) s))})
               (update :ip inc)
               (assoc :blocked false))]
     (case op
@@ -66,8 +64,7 @@
 (def init {:ip 0
            :send-count 0
            :outbox []
-           :inbox clojure.lang.PersistentQueue/EMPTY
-           :trace []})
+           :inbox clojure.lang.PersistentQueue/EMPTY})
 
 (defn move-msgs [from to ss]
   (-> ss
@@ -78,9 +75,7 @@
   (loop [ss [(assoc init 'p 0 :prog prog)
              (assoc init 'p 1 :prog prog)]]
     (if (every? #(and (:blocked %) (empty? (:outbox %))) ss)
-      (do
-        (prn :part-2 (get-in ss [1 :send-count]))
-        (-> (get ss 0) :trace))
+      (prn :part-2 (get-in ss [1 :send-count]))
       (recur (->> ss
                   (move-msgs 0 1)
                   (move-msgs 1 0)
